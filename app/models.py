@@ -25,7 +25,7 @@ class Usuario(Base):
     usuario_id = Column(Integer, primary_key=True, index=True)
     nombre_completo = Column(String(100), nullable=False)
     login = Column(String(50), unique=True, nullable=False, index=True)
-    password_hash = Column(Text, nullable=False)
+    password_hash = Column(Text, nullable=True)
     rol = Column(Enum(RolUsuario), nullable=False)
     estado = Column(String(20), server_default="Activo")
     fecha_creacion = Column(DateTime(timezone=True), server_default=func.now())

@@ -11,12 +11,23 @@ class UsuarioBase(BaseModel):
     rol: RolUsuario
 
 class UsuarioCreate(UsuarioBase):
-    password: str  # Se recibe como texto plano y se hashea en el CRUD
+    password: Optional[str] = None  # <-- Opcional para ciudadanos
 
-class Usuario(UsuarioBase):
+class UsuarioLogin(BaseModel):
+    login: str
+    password: str
+
+class UsuarioRespuesta(UsuarioBase):
     usuario_id: int
-    estado: str
-    fecha_creacion: datetime
+
+    class Config:
+        from_attributes = True # O orm_mode = True porque usamos Pydantic v1
+        
+class UsuarioUpdate(BaseModel):
+    nombre_completo: str
+    login: str
+    rol: RolUsuario
+    password: Optional[str] = None
 
     class Config:
         from_attributes = True
