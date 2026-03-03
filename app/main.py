@@ -1,8 +1,16 @@
+import json
 from fastapi import FastAPI, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from . import crud, models, schemas
 from .database import SessionLocal, engine
+from .crypto_pay import encrypt_string
+from fastapi import Body
+
+# Estos valores deben coincidir con los del archivo README.md del mock
+MERCHANT_GUID = "test-merchant-001"
+SECRET_KEY = "clave-secreta-campus-2026"
+PLUSPAGOS_URL = "http://localhost:3000"
 
 # Inicialización de la DB
 models.Base.metadata.create_all(bind=engine)
@@ -56,14 +64,47 @@ def procesar(id: int, estado: models.EstadoTramite, db: Session = Depends(get_db
 # --- ENTIDAD: PAGOS ---
 @app.post("/api/pagos/checkout")
 def abrir_pago(tramite_id: int, db: Session = Depends(get_db)):
-    """ Función abrirPago(). Crea sesión en PlusPagos """
-    # Lógica para conectar con la API de PlusPagos y devolver link de pago
-    return {"checkout_url": "https://pluspagos.com.ar/check/..."}
+    # 1. Buscamos el trámite en la DB
+    tramite = db.query(models.Tramite).filter(models.Tramite.tramite_id == tramite_id).first()
+    if not tramite:
+        return {"error": "Trámite no encontrado"}
+
+    # 2. Convertir monto a centavos (str) como pide el mock
+    # Si el costo es 1250.00, el monto_centavos es "125000"
+    monto_centavos = str(int(tramite.pago.monto * 100))
+    
+    # 3. Encriptar datos sensibles
+    encrypted_data = {
+        "Comercio": MERCHANT_GUID,
+        "TransaccionComercioId": f"TR-ID-{tramite.tramite_id}",
+        "Monto": encrypt_string(monto_centavos, SECRET_KEY),
+        "UrlSuccess": encrypt_string(f"http://localhost:8000/api/pagos/exito", SECRET_KEY),
+        "UrlError": encrypt_string(f"http://localhost:8000/api/pagos/error", SECRET_KEY),
+        "Informacion": encrypt_string(json.dumps({"tramite": tramite.nombre_solicitante}), SECRET_KEY)
+    }
+    
+    return {
+        "pluspagos_url": PLUSPAGOS_URL,
+        "payload": encrypted_data
+    }
 
 @app.post("/api/pagos/webhook")
-def plus_pagos_ok(tramite_id: int, external_reference: str, db: Session = Depends(get_db)):
-    """ Recibe confirmación de PlusPagos (Función plusPagosOK) """
-    return crud.registrar_pago_exitoso(db, tramite_id=tramite_id, external_ref=external_reference)
+async def plus_pagos_webhook(payload: dict = Body(...), db: Session = Depends(get_db)):
+    """ Recibe el POST del Mock de PlusPagos """
+    
+    # El mock manda: Estado, TransaccionComercioId, etc.
+    estado = payload.get("Estado") # "REALIZADA" si está OK
+    referencia = payload.get("TransaccionComercioId") # "TR-ID-10"
+    
+    if estado == "REALIZADA":
+        # Extraemos el ID del trámite de la referencia "TR-ID-10"
+        t_id = int(referencia.split("-")[-1])
+        
+        # Guardamos en la DB usando tu CRUD
+        crud.registrar_pago_exitoso(db, tramite_id=t_id, external_ref=payload.get("TransaccionPlataformaId"))
+        print(f"✅ Pago confirmado para trámite {t_id}")
+        
+    return {"status": "received"}
 
 # --- ENTIDAD: CERTIFICADO ---
 @app.get("/api/certificados/{id}")
