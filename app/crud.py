@@ -92,24 +92,20 @@ def registrar_pago_exitoso(db: Session, tramite_id: int, external_ref: str):
 
 # --- EMISIÓN DE CERTIFICADO ---
 
-def emitir_certificado(db: Session, tramite_id: int, operador_id: int, url_s3: str):
-    """
-    Crea el registro del certificado y marca el trámite como EMITIDO.
-    """
-    # 1. Crear el objeto Certificado
-    nuevo_certificado = models.Certificado(
+def emitir_certificado(db: Session, tramite_id: int, operador_id: int):
+    # Simplemente registramos que se emitió
+    nuevo_reg = models.Certificado(
         tramite_id=tramite_id,
-        usuario_id=operador_id,
-        url_archivo_s3=url_s3
+        usuario_id=operador_id
     )
-    db.add(nuevo_certificado)
+    db.add(nuevo_reg)
     
-    # 2. Actualizar el estado del trámite usando nuestra lógica central
-    actualizar_estado_tramite(db, tramite_id, models.EstadoTramite.EMITIDA)
+    # Actualizamos el trámite
+    db_tramite = db.query(models.Tramite).filter(models.Tramite.tramite_id == tramite_id).first()
+    db_tramite.estado = "EMITIDA"
     
     db.commit()
-    db.refresh(nuevo_certificado)
-    return nuevo_certificado
+    return nuevo_reg
 
 def actualizar_usuario(db: Session, usuario_id: int, datos: schemas.UsuarioUpdate):
     db_usuario = db.query(models.Usuario).filter(models.Usuario.usuario_id == usuario_id).first()

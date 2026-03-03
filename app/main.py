@@ -8,6 +8,9 @@ from .crypto_pay import encrypt_string
 from fastapi import Body
 from typing import List, Optional
 from fastapi.responses import RedirectResponse
+from fastapi.responses import StreamingResponse
+from .services.pdf_gen import generar_pdf_certificado
+from datetime import datetime
 
 # Estos valores deben coincidir con los del archivo README.md del mock
 MERCHANT_GUID = "test-merchant-001"
@@ -85,8 +88,8 @@ def crear_tramite_endpoint(tramite: schemas.TramiteCreate, db: Session = Depends
 @app.get("/api/tramites/me", response_model=List[schemas.Tramite])
 def list_c(db: Session = Depends(get_db)):
     """ Lista solo los trámites del CIUDADANO logueado """
-    # Simulamos que el usuario logueado es el ID 3
-    return db.query(models.Tramite).filter(models.Tramite.usuario_creador_id == 3).all()
+    # Simulamos que el usuario logueado es el ID 1
+    return db.query(models.Tramite).filter(models.Tramite.usuario_creador_id == 1).all()
 
 @app.patch("/api/tramites/{id}")
 def procesar(id: int, estado: models.EstadoTramite, db: Session = Depends(get_db)):
@@ -148,25 +151,44 @@ async def plus_pagos_webhook(payload: dict = Body(...), db: Session = Depends(ge
 @app.get("/api/certificados/{tramite_id}")
 def ver_certificado(tramite_id: int, db: Session = Depends(get_db)):
     """ 
-    Función verCertificado(). 
-    Busca el certificado asociado al trámite y redirige a la descarga en S3. 
+    Genera y descarga el PDF del certificado usando ReportLab.
     """
-    # 1. Buscar el certificado en la base de datos vinculado al trámite
-    db_certificado = db.query(models.Certificado).filter(models.Certificado.tramite_id == tramite_id).first()
+    # 1. Buscar el trámite y los datos del ciudadano
+    db_tramite = db.query(models.Tramite).filter(models.Tramite.tramite_id == tramite_id).first()
     
-    # 2. Si no existe el certificado, es porque el trámite no fue emitido aún
-    if not db_certificado:
+    if not db_tramite:
+        raise HTTPException(status_code=404, detail="Trámite no encontrado")
+        
+    # 2. Verificar que el trámite esté en un estado que permita ver el certificado
+    if db_tramite.estado.value != "EMITIDA":
+    # El .value extrae el string "EMITIDA" del objeto EstadoTramite.EMITIDA
         raise HTTPException(
-            status_code=404, 
-            detail="Certificado no encontrado. Verifique que el trámite esté en estado EMITIDO."
+            status_code=400, 
+            detail=f"El certificado no ha sido emitido. Estado actual: {db_tramite.estado.value}"
         )
-    
-    # En lugar de RedirectResponse, devolvemos el objeto
-    return {
-        "tramite_id": tramite_id,
-        "download_url": db_certificado.url_archivo_s3,
-        "fecha_emision": db_certificado.fecha_emision
-    }
+    # 3. Obtener datos para el PDF (pueden venir del ciudadano asociado al trámite)
+    # 1. Obtenemos nombre y cuil directamente del trámite (según lo que pusiste)
+    nombre_pdf = db_tramite.nombre_solicitante 
+    cuil_pdf = db_tramite.cuil
+
+    # 2. Accedemos a la fecha desde la relación con la tabla Certificado
+    # Usamos un if para evitar que el programa explote si por alguna razón 
+    # el registro del certificado aún no se creó en esa tabla.
+    if db_tramite.certificado:
+        fecha_pdf = db_tramite.certificado.fecha_emision.strftime("%d/%m/%Y")
+    else:
+    # Opción de respaldo si no encuentra el registro en la tabla certificados
+        fecha_pdf = datetime.now().strftime("%d/%m/%Y")
+
+    # 4. Generar el PDF usando tu función
+    pdf_buffer = generar_pdf_certificado(nombre_pdf, cuil_pdf, fecha_pdf)
+
+    # 5. Retornar el archivo para descarga o visualización
+    return StreamingResponse(
+        pdf_buffer, 
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=certificado_{tramite_id}.pdf"}
+    )
 
 @app.post("/api/certificados/emitir", response_model=dict, status_code=201)
 def emitir_certificado_endpoint(
