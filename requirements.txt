@@ -1,1 +1,1 @@
-pip install --only-binary :all: fastapi uvicorn sqlalchemy pydantic pydantic[email] reportlab requests python-multipart pycryptodome psycopg2-binary
+pip install fastapi uvicorn sqlalchemy pydantic[email] reportlab requests python-multipart pycryptodome psycopg2-binary python-jose[cryptography] python-dotenv mailtrap

@@ -1,5 +1,4 @@
-winget install Python.Python.3.12
-winget install PostgreSQL.PostgreSQL.16
-uvicorn app.main:app --reload
-pg_ctl.exe start -D "D:\Python port\WPy64-313110\tu_carpeta_postgres\data"
-.\pg_ctl.exe start -D "F:\PostgreSQL\18\data"
+winget install Python.Python.3.12 instalar python
+winget install PostgreSQL.PostgreSQL.16 instalar PostgreSQL
+uvicorn app.main:app --reload Para arrancar el servidor python
+.\pg_ctl.exe start -D "F:\PostgreSQL\18\data" Para Iniciar el Servidor postgre
