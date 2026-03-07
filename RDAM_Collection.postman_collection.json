@@ -1,116 +1,55 @@
 {
 	"info": {
-		"_postman_id": "8a2b3c4d-e5f6-7g8h-9i0j-k1l2m3n4o5p6",
-		"name": "RDAM Santa Fe - Backend",
-		"description": "Colección completa para testear el flujo de trámites, pagos y certificados del sistema RDAM.",
-		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+		"_postman_id": "a1b2c3d4-e5f6-4789-9012-34567890abcd",
+		"name": "RDAM Santa Fe API",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"description": "Colección completa para testear el flujo de trámites, pagos y certificados del sistema RDAM."
 	},
 	"item": [
 		{
 			"name": "Auth",
 			"item": [
-				{
-					"name": "Login",
-					"request": {
-						"method": "POST",
-						"header": [],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"login\": \"mariano\",\n    \"password\": \"123\"\n}",
-							"options": { "raw": { "language": "json" } }
-						},
-						"url": { "raw": "{{base_url}}/api/auth/login", "host": ["{{base_url}}"], "path": ["api", "auth", "login"] }
-					}
-				}
+				{ "name": "Login Staff", "request": { "method": "POST", "url": "{{base_url}}/api/auth/login" } },
+				{ "name": "Solicitar Código", "request": { "method": "POST", "url": "{{base_url}}/api/auth/ciudadano/solicitar-codigo?email=test@mail.com&recaptcha_token=token_prueba_123" } },
+				{ "name": "Verificar Código", "request": { "method": "POST", "url": "{{base_url}}/api/auth/ciudadano/verificar?email=test@mail.com&codigo=123456" } }
 			]
 		},
 		{
 			"name": "Trámites",
 			"item": [
-				{
-					"name": "Crear Trámite",
-					"request": {
-						"method": "POST",
-						"header": [],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"nombre_solicitante\": \"Mariano Arias\",\n    \"cuil\": \"20334445551\",\n    \"tipo_tramite\": \"ADOPCION\"\n}",
-							"options": { "raw": { "language": "json" } }
-						},
-						"url": { "raw": "{{base_url}}/api/tramites", "host": ["{{base_url}}"], "path": ["api", "tramites"] }
+				{ "name": "Crear Trámite", "request": { "method": "POST", "header": [{"key": "Authorization", "value": "Bearer <TOKEN>"}],"body": {"mode": "raw","raw": "{\n  \"cuil\": \"20461340602\",\n  \"nombre_solicitante\": \"Mariano Arias\",\n  \"email_contacto\": \"mariano@gmail.com\",\n  \"ciudad_solicitante\": \"Santa Fe\",\n  \"fecha_solicitud\": \"2026-03-07\"\n}",
+				"options": {
+					"raw": {
+						"language": "json"
 					}
-				},
-				{
-					"name": "Cambiar Estado (A PAGADA)",
-					"request": {
-						"method": "PATCH",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/api/tramites/1?estado=PAGADA",
-							"host": ["{{base_url}}"],
-							"path": ["api", "tramites", "1"],
-							"query": [{ "key": "estado", "value": "PAGADA" }]
-						}
-					}
-				}
+				}}, "url": "{{base_url}}/api/tramites/crear" } },
+				{ "name": "Listar Trámites", "request": { "method": "GET", "url": "{{base_url}}/api/tramites" } },
+				{ "name": "Mis Solicitudes (Ciudadano)", "request": { "method": "GET", "url": "{{base_url}}/api/tramites/mis-solicitudes?email=test@mail.com" } },
+				{ "name": "Actualizar Estado", "request": { "method": "PATCH", "url": "{{base_url}}/api/tramites/1?estado=PAGADA" } }
 			]
 		},
 		{
-			"name": "Pagos & Webhook",
+			"name": "Pagos y Certificados",
 			"item": [
-				{
-					"name": "Simular Pago Exitoso (Webhook)",
-					"request": {
-						"method": "POST",
-						"header": [],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"Estado\": \"REALIZADA\",\n    \"TransaccionComercioId\": \"TR-ID-1\",\n    \"TransaccionPlataformaId\": \"PP-999888\"\n}",
-							"options": { "raw": { "language": "json" } }
-						},
-						"url": { "raw": "{{base_url}}/api/pagos/webhook", "host": ["{{base_url}}"], "path": ["api", "pagos", "webhook"] }
+				{ "name": "Abrir Pago", "request": { "method": "POST", "url": "{{base_url}}/api/pagos/checkout?tramite_id=1" } },
+				{ "name": "Webhook PlusPagos", "request": { "method": "POST","body": {"mode": "raw","raw": "{\n  \"Estado\": \"REALIZADA\",\n  \"TransaccionComercioId\": \"TR-ID-1\",\n  \"TransaccionPlataformaId\": \"PLAT-999999\"\n}",
+				"options": {
+					"raw": {
+						"language": "json"
 					}
-				}
+				}}, "url": "{{base_url}}/api/pagos/webhook" } },
+				{ "name": "Ver Certificado (PDF)", "request": { "method": "GET", "url": "{{base_url}}/api/certificados/1" } },
+				{ "name": "Emitir Certificado", "request": { "method": "POST", "url": "{{base_url}}/api/certificados/emitir?tramite_id=1&url_s3=http://s3.link&operador_id=1" } }
 			]
 		},
 		{
-			"name": "Certificados",
+			"name": "Usuarios",
 			"item": [
-				{
-					"name": "Emitir Certificado",
-					"request": {
-						"method": "POST",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/api/certificados/emitir?tramite_id=1&url_s3=http://s3.aws/cert.pdf&operador_id=1",
-							"host": ["{{base_url}}"],
-							"path": ["api", "certificados", "emitir"],
-							"query": [
-								{ "key": "tramite_id", "value": "1" },
-								{ "key": "url_s3", "value": "http://s3.aws/cert.pdf" },
-								{ "key": "operador_id", "value": "1" }
-							]
-						}
-					}
-				},
-				{
-					"name": "Descargar PDF",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": { "raw": "{{base_url}}/api/certificados/1", "host": ["{{base_url}}"], "path": ["api", "certificados", "1"] }
-					}
-				}
+				{ "name": "Listar Usuarios", "request": { "method": "GET", "url": "{{base_url}}/api/admin/users" } },
+				{ "name": "Crear Usuario", "request": { "method": "POST", "url": "{{base_url}}/api/usuarios" } },
+				{ "name": "Guardar/Editar Usuario", "request": { "method": "PUT", "url": "{{base_url}}/api/admin/users/1" } }
 			]
 		}
 	],
-	"event": [
-		{
-			"listen": "prerequest",
-			"script": { "type": "text/javascript", "exec": [""] }
-		}
-	],
-	"variable": [
-		{ "key": "base_url", "value": "http://127.0.0.1:8000", "type": "string" }
-	]
+	"variable": [ { "key": "base_url", "value": "http://localhost:8000" } ]
 }

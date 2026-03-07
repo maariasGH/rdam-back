@@ -5,46 +5,67 @@ from typing import List, Optional
 from . import crud, models, schemas
 from .database import SessionLocal, engine
 from .crypto_pay import encrypt_string
-from fastapi import Body
+from fastapi import Body, Header
 from typing import List, Optional
 from fastapi.responses import RedirectResponse
 from fastapi.responses import StreamingResponse
 from .services.pdf_gen import generar_pdf_certificado
-from datetime import datetime
+from datetime import datetime, timedelta
 import random
 import string
-from datetime import timedelta
-import smtplib
 from email.message import EmailMessage
-from fastapi import BackgroundTasks # Para que el mail no trabe la respuesta de la API
+import mailtrap as mt
+import os
+from dotenv import load_dotenv
+from .security import verify_password, crear_token_jwt, verificar_token
+import requests
 
-# Configuración envio de mail (Esto debería ir en variables de entorno)
-SMTP_SERVER = "sandbox.smtp.mailtrap.io" # O smtp.gmail.com
-SMTP_PORT = 587 # Para Gmail es 587
-SMTP_USER = "28361cfee46820"
-SMTP_PASS = "482a27ed65e34c"
+# Cargar las variables del archivo .env
+load_dotenv()
 
-def enviar_email_otp(destinatario, codigo):
-    msg = EmailMessage()
-    msg.set_content(f"Tu código de acceso temporal para RDAM es: {codigo}. Vence en 15 minutos.")
-    msg["Subject"] = "Código de Acceso - RDAM Santa Fe"
-    msg["From"] = "sistema@rdam.santafe.gov.ar"
-    msg["To"] = destinatario
+# Acceso a ellas
+SMTP_USER = os.getenv("SMTP_USER")
+SMTP_PASS = os.getenv("SMTP_PASS")
+SMTP_SERVER = os.getenv("SMTP_SERVER")
+SMTP_PORT = int(os.getenv("SMTP_PORT", 2525))
+API_TOKEN= os.getenv("API_TOKEN")
+MERCHANT_GUID = os.getenv("MERCHANT_GUID")
+SECRET_KEY = os.getenv("SECRET_KEY")
+PLUSPAGOS_URL = os.getenv("PLUSPAGOS_URL")
+RECAPTCHA_SECRET = os.getenv("RECAPTCHA_SECRET_KEY")
+
+
+def enviar_email(destinatario, codigo):
+    # Cargar el token justo antes de usarlo para asegurar que lo lee
+    token_actual = API_TOKEN
+    
+    if not token_actual:
+        print("❌ ERROR: No se encontró el API_TOKEN en las variables de entorno")
+        return
+
+    # IMPORTANTE: En Mailtrap Sandbox, el remitente DEBE ser este para que no rebote
+    sender_email = "hello@demomailtrap.com" 
+    
+    mail = mt.Mail(
+        sender=mt.Address(email=sender_email, name="Sistema RDAM"),
+        to=[mt.Address(email=destinatario)],
+        subject="Tu Código de Acceso - RDAM",
+        text=f"Tu código es: {codigo}. Válido por 15 minutos.",
+        category="Auth"
+    )
 
     try:
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-            server.starttls() # Inicia conexión segura
-            server.login(SMTP_USER, SMTP_PASS)
-            server.send_message(msg)
-        return True
+        client = mt.MailtrapClient(token=token_actual)
+        client.send(mail)
+        print(f"✅ Email enviado a {destinatario}")
     except Exception as e:
-        print(f"❌ Error enviando mail: {e}")
-        return False
+        print(f"❌ Error al enviar con Mailtrap: {e}")
+        print(f"[SIMULACION] Codigo enviado a {destinatario}: {codigo}. Válido por 15 minutos. Tambien puede ser consultado en la BD")
 
-# Estos valores deben coincidir con los del archivo README.md del mock
-MERCHANT_GUID = "test-merchant-001"
-SECRET_KEY = "clave-secreta-campus-2026"
-PLUSPAGOS_URL = "http://localhost:3000"
+def generar_codigo():
+    codigo = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    return codigo
+
 
 # Inicialización de la DB
 models.Base.metadata.create_all(bind=engine)
@@ -60,24 +81,73 @@ def get_db():
 
 # --- ENTIDAD: AUTH ---
 @app.post("/api/auth/login", response_model=dict)
-# --- NUEVOS ENDPOINTS CIUDADANO ---
+def login_staff(params: schemas.UsuarioLogin, db: Session = Depends(get_db)):
+    """
+    Endpoint para que Operadores y Administradores inicien sesión 
+    con usuario y contraseña.
+    """
+    # 1. Buscar al usuario en la base de datos
+    user = db.query(models.Usuario).filter(models.Usuario.login == params.login).first()
+
+    # 2. Validar si existe y si la password es correcta
+    # NOTA: En producción deberías usar hash (ej. passlib) en lugar de texto plano
+    if not user or not verify_password(params.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Usuario o contraseña incorrectos",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # 4. Responder con los datos del perfil y un token de sesión
+    return {
+        "msg": {
+          "exito": "Inicio de Sesión Exitoso"  
+        },
+        "user": {
+            "login": user.login,
+            "rol": user.rol,
+            "nombre": user.nombre_completo
+        }
+    }
+    
+# --- NUEVOS ENDPOINTS CIUDADANO-TRAMITE ---
 
 @app.post("/api/auth/ciudadano/solicitar-codigo")
-async def solicitar_codigo(
-    email: str, 
-    background_tasks: BackgroundTasks, 
-    db: Session = Depends(get_db)
-):
-    # Generar código
-    codigo = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+def solicitar_codigo(email: str, recaptcha_token: str, db: Session = Depends(get_db)):
     
-    # Guardar en BD (la función del CRUD ya aplica el timedelta(minutes=15))
-    crud.guardar_codigo_temporal(db, email=email, codigo=codigo)
+    # 1. Validar el token de reCAPTCHA con Google
+    url = "https://www.google.com/recaptcha/api/siteverify"
+    payload = {
+        "secret": RECAPTCHA_SECRET,
+        "response": recaptcha_token
+    }
+    response = requests.post(url, data=payload).json()
+
+    # Si la validación falla o el score es bajo (ej: < 0.5), bloqueamos el intento
+    if recaptcha_token == "token_prueba_123":
+        print("⚠️ Bypass de Captcha activado (Solo desarrollo, hasta que se desarrolle el front-end y se pueda integrar la api del Captcha)")
+    else:
+        if not response.get("success") or response.get("score", 0) < 0.5:
+            raise HTTPException(status_code=400, detail="Error de seguridad: Solicitud sospechosa detectada.")
+
+    # 2. Tu lógica actual (Generación de OTP y envío de email)
+    db.query(models.CodigoTemporal).filter(models.CodigoTemporal.email == email).delete()
     
-    # Enviar mail
-    background_tasks.add_task(enviar_email_otp, email, codigo)
+    codigo_otp = generar_codigo()
+    expiracion = datetime.now() + timedelta(minutes=15)
     
-    return {"message": "Código enviado. Válido por 15 minutos."}
+    nuevo_registro = models.CodigoTemporal(email=email, codigo=codigo_otp, expiracion=expiracion)
+    db.add(nuevo_registro)
+    db.commit()
+    
+    try:
+        enviar_email(destinatario=email, codigo=codigo_otp)
+    except Exception as e:
+        db.delete(nuevo_registro)
+        db.commit()
+        raise HTTPException(status_code=500, detail="Error al enviar el correo")
+        
+    return {"message": "Código enviado correctamente."}
 
 @app.post("/api/auth/ciudadano/verificar")
 def verificar_codigo(email: str, codigo: str, db: Session = Depends(get_db)):
@@ -99,9 +169,11 @@ def verificar_codigo(email: str, codigo: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="El código ha expirado. Solicite uno nuevo.")
 
     # 4. Éxito
+    token_jwt = crear_token_jwt({"sub": email})
+    
     return {
-        "message": "Validación exitosa",
-        "token": f"token-temporal-{email}"
+        "access_token": token_jwt,
+        "token_type": "bearer"
     }
 
 # --- ENTIDAD: TRÁMITE ---
@@ -116,13 +188,38 @@ def list_i(
     """ Lista todos los trámites con filtros para el OPERADOR/ADMIN """
     return crud.get_todos_los_tramites(db, estado=estado, cuil=cuil, fecha=fecha)
 
-@app.post("/api/tramites", response_model=schemas.Tramite)
-def crear_tramite_endpoint(tramite: schemas.TramiteCreate, db: Session = Depends(get_db)):
-    """ Crea un nuevo trámite de adopción (Función crearTramite) """
-    # En el curso, aquí usarías el ID del usuario que inició sesión
-    return crud.crear_tramite(db=db, tramite=tramite) 
-
-    # --- MODIFICACIÓN DEL ENDPOINT DE CONSULTA ---
+@app.post("/api/tramites/crear")
+def crear_tramite(
+    tramite_data: schemas.TramiteCreate,
+    authorization: str = Header(...), # El cliente envía "Bearer <JWT>"
+    db: Session = Depends(get_db)
+):
+    # 1. Extraer el token del header
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Formato de token inválido")
+    
+    token = authorization.replace("Bearer ", "")
+    
+    # 2. Validar el token JWT
+    payload = verificar_token(token) # Función que definimos en el paso anterior
+    
+    if not payload:
+        raise HTTPException(status_code=401, detail="Token inválido o expirado")
+    
+    # 3. Obtener el email desde el payload (el 'sub' que pusimos al crear el token)
+    email_ciudadano = payload.get("sub")
+    
+    # 4. Usar tu método CRUD existente
+    # Aquí puedes pasar el email si necesitas registrar quién creó el trámite
+    nuevo_tramite = crud.crear_tramite(db=db, tramite=tramite_data)
+    
+    return {
+        "message": "Trámite creado exitosamente",
+        "tramite_id": nuevo_tramite.tramite_id,
+        "usuario": email_ciudadano
+    }
+    
+# --- MODIFICACIÓN DEL ENDPOINT DE CONSULTA ---
 
 @app.get("/api/tramites/mis-solicitudes")
 def listar_solicitudes_ciudadano(email: str, db: Session = Depends(get_db)):
@@ -269,7 +366,7 @@ def emitir_certificado_endpoint(
 # --- ENTIDAD: USUARIOS ---
 @app.get("/api/admin/users")
 def list_u(db: Session = Depends(get_db)):
-    """ Renderiza list-u (Gestión de Usuarios) """
+    """ Renderiza list-u, La lista de Usuarios (Gestión de Usuarios) """
     return db.query(models.Usuario).all()
 
 @app.put("/api/admin/users/{id}")
@@ -295,7 +392,7 @@ def save_user(id: int, usuario: schemas.UsuarioUpdate, db: Session = Depends(get
 @app.post("/api/usuarios", response_model=schemas.UsuarioRespuesta, status_code=status.HTTP_201_CREATED)
 def crear_usuario_endpoint(usuario: schemas.UsuarioCreate, db: Session = Depends(get_db)):
     """ 
-    Endpoint para registrar un nuevo usuario (ADMIN/OPERADOR/CIUDADANO).
+    Endpoint para registrar un nuevo usuario (ADMIN/OPERADOR).
     Si el rol no es CIUDADANO, requiere contraseña.
     """
     # 1. Verificar si el login ya existe para evitar duplicados
@@ -306,13 +403,12 @@ def crear_usuario_endpoint(usuario: schemas.UsuarioCreate, db: Session = Depends
             detail="El nombre de usuario (login) ya está en uso."
         )
 
-    # 2. Validación de contraseña según rol (Regla de Negocio RDAM)
-    if usuario.rol != models.RolUsuario.CIUDADANO:
-        if not usuario.password or len(usuario.password) < 3:
-            raise HTTPException(
-                status_code=400, 
-                detail="Los administradores y operadores requieren una contraseña de al menos 3 caracteres."
-            )
+
+    if not usuario.password or len(usuario.password) < 3:
+        raise HTTPException(
+            status_code=400, 
+            detail="Los administradores y operadores requieren una contraseña de al menos 3 caracteres."
+        )
 
     # 3. Llamar al CRUD para insertar en la DB
     nuevo_usuario = crud.crear_usuario(db=db, usuario=usuario)

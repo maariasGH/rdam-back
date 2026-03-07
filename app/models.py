@@ -59,7 +59,7 @@ class Tramite(Base):
     tramite_id = Column(Integer, primary_key=True, index=True)
     cuil = Column(String(15), nullable=False, index=True)
     nombre_solicitante = Column(String(100), nullable=False)
-    email_solicitante = Column(String(100), nullable=False)
+    email_contacto = Column(String(100), nullable=False)
     estado = Column(Enum(EstadoTramite), server_default="PENDIENTE", index=True)
     fecha_solicitud = Column(Date, server_default=func.current_date())
     usuario_creador_id = Column(Integer, ForeignKey("usuarios.usuario_id"))

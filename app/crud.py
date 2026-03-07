@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 from . import models, schemas
 from datetime import datetime, timedelta
+from .security import hash_password
 
 # --- FUNCIONES DEL CODIGO TEMPORAL ---
 
@@ -48,8 +49,9 @@ def crear_usuario(db: Session, usuario: schemas.UsuarioCreate):
     db_usuario = models.Usuario(
         nombre_completo=usuario.nombre_completo,
         login=usuario.login,
-        password_hash=usuario.password, 
-        rol=usuario.rol
+        password_hash=hash_password(usuario.password), 
+        rol=usuario.rol,
+        registrador_id=usuario.registrador_id
     )
     db.add(db_usuario)
     db.commit()
@@ -67,7 +69,7 @@ def crear_tramite(db: Session, tramite: schemas.TramiteCreate):
         ciudad_solicitante=tramite.ciudad_solicitante,
         estado=models.EstadoTramite.PENDIENTE,
         # Asumimos que 'email_solicitante' viene dentro del objeto 'tramite' (schemas.TramiteCreate)
-        email_solicitante=tramite.email_solicitante 
+        email_contacto=tramite.email_contacto 
     )
     db.add(db_tramite)
     db.commit()
@@ -132,11 +134,13 @@ def registrar_pago_exitoso(db: Session, tramite_id: int, external_ref: str):
 
 # --- EMISIÓN DE CERTIFICADO ---
 
-def emitir_certificado(db: Session, tramite_id: int, operador_id: int):
+def emitir_certificado(db: Session, tramite_id: int, operador_id: int, url_s3: str):
     # Simplemente registramos que se emitió
     nuevo_reg = models.Certificado(
         tramite_id=tramite_id,
-        usuario_id=operador_id
+        usuario_id=operador_id,
+        url_archivo_s3=url_s3,
+        fecha_emision=datetime.now()
     )
     db.add(nuevo_reg)
     
@@ -155,9 +159,9 @@ def actualizar_usuario(db: Session, usuario_id: int, datos: schemas.UsuarioUpdat
         db_usuario.login = datos.login
         db_usuario.rol = datos.rol
         
-        # Solo actualizamos la contraseña si se envió una (o si no es ciudadano)
+        # Solo actualizamos la contraseña si se envió una
         if datos.password:
-            db_usuario.password_hash = datos.password # Aquí pondrías el hash en el futuro
+            db_usuario.password_hash = hash_password(datos.password)
             
         db.commit()
         db.refresh(db_usuario)

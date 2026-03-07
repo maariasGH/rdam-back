@@ -9,6 +9,7 @@ class UsuarioBase(BaseModel):
     nombre_completo: str
     login: str
     rol: RolUsuario
+    registrador_id: int
 
 class UsuarioCreate(UsuarioBase):
     password: Optional[str] = None  # <-- Opcional para ciudadanos
@@ -37,7 +38,7 @@ class UsuarioUpdate(BaseModel):
 class TramiteBase(BaseModel):
     cuil: str = Field(..., min_length=11, max_length=15, description="CUIL sin guiones")
     nombre_solicitante: str
-    email_solicitante: EmailStr
+    email_contacto: EmailStr
     ciudad_solicitante: str
     fecha_solicitud: date
 
