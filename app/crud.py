@@ -1,6 +1,43 @@
 from sqlalchemy.orm import Session
 from . import models, schemas
-from datetime import datetime
+from datetime import datetime, timedelta
+
+# --- FUNCIONES DEL CODIGO TEMPORAL ---
+
+from datetime import datetime, timedelta # Asegúrate de importar esto
+
+def guardar_codigo_temporal(db: Session, email: str, codigo: str):
+    """ Almacena un nuevo código OTP para un email con expiración de 15 minutos """
+    # 1. Eliminamos códigos viejos
+    db.query(models.CodigoTemporal).filter(models.CodigoTemporal.email == email).delete()
+    
+    # 2. Calculamos la expiración (hora actual + 15 minutos)
+    fecha_expiracion = datetime.now() + timedelta(minutes=15)
+    
+    # 3. Creamos el objeto incluyendo la expiración
+    nuevo_otp = models.CodigoTemporal(
+        email=email, 
+        codigo=codigo, 
+        expiracion=fecha_expiracion # <--- ESTO ES LO QUE FALTABA
+    )
+    
+    db.add(nuevo_otp)
+    db.commit()
+    db.refresh(nuevo_otp)
+    return nuevo_otp
+    
+def validar_codigo_otp(db: Session, email: str, codigo: str):
+    """ Verifica si el código coincide y si aún es válido (15 min) """
+    otp_record = db.query(models.CodigoTemporal).filter(
+        models.CodigoTemporal.email == email,
+        models.CodigoTemporal.codigo == codigo
+    ).first()
+
+    if otp_record:
+        # Verificamos si la hora actual es menor a la de expiración
+        if datetime.now() < otp_record.expiracion:
+            return True
+    return False
 
 # --- FUNCIONES DE USUARIO ---
 
@@ -21,22 +58,25 @@ def crear_usuario(db: Session, usuario: schemas.UsuarioCreate):
 
 # --- GESTIÓN DE TRÁMITES ---
 
-def crear_tramite(db: Session, tramite: schemas.TramiteCreate, usuario_id: int):
-    # 1. Crear el trámite
+def crear_tramite(db: Session, tramite: schemas.TramiteCreate):
+    # 1. Crear el trámite incluyendo el email del solicitante
     db_tramite = models.Tramite(
-        **tramite.dict(),
-        usuario_creador_id=usuario_id,
-        estado=models.EstadoTramite.PENDIENTE
+        cuil=tramite.cuil,
+        nombre_solicitante=tramite.nombre_solicitante,
+        fecha_solicitud=tramite.fecha_solicitud,
+        ciudad_solicitante=tramite.ciudad_solicitante,
+        estado=models.EstadoTramite.PENDIENTE,
+        # Asumimos que 'email_solicitante' viene dentro del objeto 'tramite' (schemas.TramiteCreate)
+        email_solicitante=tramite.email_solicitante 
     )
     db.add(db_tramite)
-    db.commit() # Commiteamos para tener el tramite_id
+    db.commit()
     db.refresh(db_tramite)
 
-    # 2. SOLUCIÓN AL ERROR NoneType: 
-    # Creamos el registro de Pago vacío asociado al trámite inmediatamente
+    # 2. Registro de Pago
     db_pago = models.Pago(
         tramite_id=db_tramite.tramite_id,
-        monto=1250.00, # Valor por defecto del sistema
+        monto=1250.00,
         pagado=False
     )
     db.add(db_pago)

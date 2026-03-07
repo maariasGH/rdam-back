@@ -18,6 +18,14 @@ class RolUsuario(enum.Enum):
     OPERADOR = "OPERADOR"
     ADMINISTRADOR = "ADMINISTRADOR"
 
+#Creamos una clase para el token
+class CodigoTemporal(Base):
+    __tablename__ = "codigos_temporales"
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, index=True)
+    codigo = Column(String(6))
+    expiracion = Column(DateTime, nullable=False) # Para validar los 15 minutos
+
 # 2. Tabla de Usuarios con Relación Recursiva
 class Usuario(Base):
     __tablename__ = "usuarios"
@@ -51,7 +59,7 @@ class Tramite(Base):
     tramite_id = Column(Integer, primary_key=True, index=True)
     cuil = Column(String(15), nullable=False, index=True)
     nombre_solicitante = Column(String(100), nullable=False)
-    email_contacto = Column(String(100), nullable=False)
+    email_solicitante = Column(String(100), nullable=False)
     estado = Column(Enum(EstadoTramite), server_default="PENDIENTE", index=True)
     fecha_solicitud = Column(Date, server_default=func.current_date())
     usuario_creador_id = Column(Integer, ForeignKey("usuarios.usuario_id"))

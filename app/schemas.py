@@ -37,8 +37,9 @@ class UsuarioUpdate(BaseModel):
 class TramiteBase(BaseModel):
     cuil: str = Field(..., min_length=11, max_length=15, description="CUIL sin guiones")
     nombre_solicitante: str
-    email_contacto: EmailStr
+    email_solicitante: EmailStr
     ciudad_solicitante: str
+    fecha_solicitud: date
 
 class TramiteCreate(TramiteBase):
     pass
@@ -47,7 +48,6 @@ class Tramite(TramiteBase):
     tramite_id: int
     estado: EstadoTramite
     fecha_solicitud: date
-    usuario_creador_id: int
     fecha_ultima_modificacion: datetime
 
     class Config:

@@ -11,6 +11,35 @@ from fastapi.responses import RedirectResponse
 from fastapi.responses import StreamingResponse
 from .services.pdf_gen import generar_pdf_certificado
 from datetime import datetime
+import random
+import string
+from datetime import timedelta
+import smtplib
+from email.message import EmailMessage
+from fastapi import BackgroundTasks # Para que el mail no trabe la respuesta de la API
+
+# Configuración envio de mail (Esto debería ir en variables de entorno)
+SMTP_SERVER = "sandbox.smtp.mailtrap.io" # O smtp.gmail.com
+SMTP_PORT = 587 # Para Gmail es 587
+SMTP_USER = "28361cfee46820"
+SMTP_PASS = "482a27ed65e34c"
+
+def enviar_email_otp(destinatario, codigo):
+    msg = EmailMessage()
+    msg.set_content(f"Tu código de acceso temporal para RDAM es: {codigo}. Vence en 15 minutos.")
+    msg["Subject"] = "Código de Acceso - RDAM Santa Fe"
+    msg["From"] = "sistema@rdam.santafe.gov.ar"
+    msg["To"] = destinatario
+
+    try:
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.starttls() # Inicia conexión segura
+            server.login(SMTP_USER, SMTP_PASS)
+            server.send_message(msg)
+        return True
+    except Exception as e:
+        print(f"❌ Error enviando mail: {e}")
+        return False
 
 # Estos valores deben coincidir con los del archivo README.md del mock
 MERCHANT_GUID = "test-merchant-001"
@@ -31,40 +60,48 @@ def get_db():
 
 # --- ENTIDAD: AUTH ---
 @app.post("/api/auth/login", response_model=dict)
-def login(auth_data: schemas.UsuarioLogin, db: Session = Depends(get_db)):
-    # 1. Buscar al usuario
-    db_user = crud.get_usuario_by_login(db, login=auth_data.login)
-    
-    # 2. Si no existe, error 401
-    if not db_user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, 
-            detail="Credenciales incorrectas"
-        )
-    
-    # 3. LÓGICA DE VALIDACIÓN POR ROL
-    # Si es CIUDADANO, entra directo (o podrías pedir que el password venga vacío)
-    if db_user.rol == models.RolUsuario.CIUDADANO:
-        # Opcional: podrías verificar que el password enviado sea null o vacío
-        pass 
-    else:
-        # Si es OPERADOR o ADMINISTRADOR, la contraseña es OBLIGATORIA
-        if not db_user.password_hash or db_user.password_hash != auth_data.password:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, 
-                detail="Contraseña incorrecta para perfil administrativo"
-            )
-    
-    # 4. Verificar si la cuenta está activa
-    if db_user.estado != "Activo":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, 
-            detail="Usuario inactivo"
-        )
+# --- NUEVOS ENDPOINTS CIUDADANO ---
 
+@app.post("/api/auth/ciudadano/solicitar-codigo")
+async def solicitar_codigo(
+    email: str, 
+    background_tasks: BackgroundTasks, 
+    db: Session = Depends(get_db)
+):
+    # Generar código
+    codigo = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    
+    # Guardar en BD (la función del CRUD ya aplica el timedelta(minutes=15))
+    crud.guardar_codigo_temporal(db, email=email, codigo=codigo)
+    
+    # Enviar mail
+    background_tasks.add_task(enviar_email_otp, email, codigo)
+    
+    return {"message": "Código enviado. Válido por 15 minutos."}
+
+@app.post("/api/auth/ciudadano/verificar")
+def verificar_codigo(email: str, codigo: str, db: Session = Depends(get_db)):
+    # 1. Obtener registro de la BD
+    otp_record = db.query(models.CodigoTemporal).filter(
+        models.CodigoTemporal.email == email,
+        models.CodigoTemporal.codigo == codigo
+    ).first()
+
+    # 2. Verificar existencia
+    if not otp_record:
+        raise HTTPException(status_code=401, detail="Código incorrecto")
+
+    # 3. Verificar expiración (si la hora actual es mayor a la de expiración, venció)
+    if datetime.now() > otp_record.expiracion:
+        # Opcional: borrar el código vencido de la BD
+        db.delete(otp_record)
+        db.commit()
+        raise HTTPException(status_code=401, detail="El código ha expirado. Solicite uno nuevo.")
+
+    # 4. Éxito
     return {
-        "message": "Login exitoso",
-        "user": schemas.UsuarioRespuesta.from_orm(db_user)
+        "message": "Validación exitosa",
+        "token": f"token-temporal-{email}"
     }
 
 # --- ENTIDAD: TRÁMITE ---
@@ -83,13 +120,15 @@ def list_i(
 def crear_tramite_endpoint(tramite: schemas.TramiteCreate, db: Session = Depends(get_db)):
     """ Crea un nuevo trámite de adopción (Función crearTramite) """
     # En el curso, aquí usarías el ID del usuario que inició sesión
-    return crud.crear_tramite(db=db, tramite=tramite, usuario_id=1) 
+    return crud.crear_tramite(db=db, tramite=tramite) 
 
-@app.get("/api/tramites/me", response_model=List[schemas.Tramite])
-def list_c(db: Session = Depends(get_db)):
-    """ Lista solo los trámites del CIUDADANO logueado """
-    # Simulamos que el usuario logueado es el ID 1
-    return db.query(models.Tramite).filter(models.Tramite.usuario_creador_id == 1).all()
+    # --- MODIFICACIÓN DEL ENDPOINT DE CONSULTA ---
+
+@app.get("/api/tramites/mis-solicitudes")
+def listar_solicitudes_ciudadano(email: str, db: Session = Depends(get_db)):
+    """ Devuelve trámites asociados al email original """
+    tramites = db.query(models.Tramite).filter(models.Tramite.email_solicitante == email).all()
+    return tramites
 
 @app.patch("/api/tramites/{id}")
 def procesar(id: int, estado: models.EstadoTramite, db: Session = Depends(get_db)):

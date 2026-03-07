@@ -1,10 +1,1 @@
-fastapi==0.104.1
-uvicorn==0.24.0
-sqlalchemy==2.0.23
-psycopg2-binary==2.9.9
-pydantic==2.5.2
-pydantic[email]==2.5.2
-reportlab==4.0.7
-requests==2.31.0
-python-multipart==0.0.6
-pycryptodome
+pip install --only-binary :all: fastapi uvicorn sqlalchemy pydantic pydantic[email] reportlab requests python-multipart pycryptodome psycopg2-binary

@@ -19,14 +19,14 @@ def generar_pdf_certificado(nombre: str, cuil: str, fecha: str):
     
     # Cuerpo del Certificado
     p.setFont("Helvetica-Bold", 14)
-    p.drawString(100, 700, "CERTIFICADO DE ESTADO")
+    p.drawString(100, 700, "CERTIFICADO DE ESTADO DEUDAS ALIMENTARIAS")
     
     p.setFont("Helvetica", 12)
     p.drawString(100, 650, f"Se certifica que el ciudadano: {nombre}")
     p.drawString(100, 630, f"Con CUIL: {cuil}")
-    p.drawString(100, 610, f"Fecha de emisión: {fecha}")
+    p.drawString(100, 610, f"A la Fecha de emisión del: {fecha}")
     
-    p.drawString(100, 550, "Estado: NO REGISTRA DEUDA ALIMENTARIA.")
+    p.drawString(100, 550, "NO REGISTRA DEUDA ALIMENTARIA ALGUNA.")
     
     p.showPage()
     p.save()

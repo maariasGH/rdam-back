@@ -1,3 +1,5 @@
 winget install Python.Python.3.12
-pip install -r requirements.txt
 winget install PostgreSQL.PostgreSQL.16
+uvicorn app.main:app --reload
+pg_ctl.exe start -D "D:\Python port\WPy64-313110\tu_carpeta_postgres\data"
+.\pg_ctl.exe start -D "F:\PostgreSQL\18\data"

@@ -1,0 +1,116 @@
+{
+	"info": {
+		"_postman_id": "8a2b3c4d-e5f6-7g8h-9i0j-k1l2m3n4o5p6",
+		"name": "RDAM Santa Fe - Backend",
+		"description": "Colección completa para testear el flujo de trámites, pagos y certificados del sistema RDAM.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Auth",
+			"item": [
+				{
+					"name": "Login",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"login\": \"mariano\",\n    \"password\": \"123\"\n}",
+							"options": { "raw": { "language": "json" } }
+						},
+						"url": { "raw": "{{base_url}}/api/auth/login", "host": ["{{base_url}}"], "path": ["api", "auth", "login"] }
+					}
+				}
+			]
+		},
+		{
+			"name": "Trámites",
+			"item": [
+				{
+					"name": "Crear Trámite",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"nombre_solicitante\": \"Mariano Arias\",\n    \"cuil\": \"20334445551\",\n    \"tipo_tramite\": \"ADOPCION\"\n}",
+							"options": { "raw": { "language": "json" } }
+						},
+						"url": { "raw": "{{base_url}}/api/tramites", "host": ["{{base_url}}"], "path": ["api", "tramites"] }
+					}
+				},
+				{
+					"name": "Cambiar Estado (A PAGADA)",
+					"request": {
+						"method": "PATCH",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/tramites/1?estado=PAGADA",
+							"host": ["{{base_url}}"],
+							"path": ["api", "tramites", "1"],
+							"query": [{ "key": "estado", "value": "PAGADA" }]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Pagos & Webhook",
+			"item": [
+				{
+					"name": "Simular Pago Exitoso (Webhook)",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"Estado\": \"REALIZADA\",\n    \"TransaccionComercioId\": \"TR-ID-1\",\n    \"TransaccionPlataformaId\": \"PP-999888\"\n}",
+							"options": { "raw": { "language": "json" } }
+						},
+						"url": { "raw": "{{base_url}}/api/pagos/webhook", "host": ["{{base_url}}"], "path": ["api", "pagos", "webhook"] }
+					}
+				}
+			]
+		},
+		{
+			"name": "Certificados",
+			"item": [
+				{
+					"name": "Emitir Certificado",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/certificados/emitir?tramite_id=1&url_s3=http://s3.aws/cert.pdf&operador_id=1",
+							"host": ["{{base_url}}"],
+							"path": ["api", "certificados", "emitir"],
+							"query": [
+								{ "key": "tramite_id", "value": "1" },
+								{ "key": "url_s3", "value": "http://s3.aws/cert.pdf" },
+								{ "key": "operador_id", "value": "1" }
+							]
+						}
+					}
+				},
+				{
+					"name": "Descargar PDF",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/certificados/1", "host": ["{{base_url}}"], "path": ["api", "certificados", "1"] }
+					}
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": { "type": "text/javascript", "exec": [""] }
+		}
+	],
+	"variable": [
+		{ "key": "base_url", "value": "http://127.0.0.1:8000", "type": "string" }
+	]
+}
