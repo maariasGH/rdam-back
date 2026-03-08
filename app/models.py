@@ -14,9 +14,9 @@ class EstadoTramite(enum.Enum):
     EMITIDA_VENCIDA = "EMITIDA_VENCIDA"
 
 class RolUsuario(enum.Enum):
-    CIUDADANO = "CIUDADANO"
     OPERADOR = "OPERADOR"
     ADMINISTRADOR = "ADMINISTRADOR"
+    CIUDADANO = "CIUDADANO"
 
 #Creamos una clase para el token
 class CodigoTemporal(Base):

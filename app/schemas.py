@@ -12,7 +12,7 @@ class UsuarioBase(BaseModel):
     registrador_id: int
 
 class UsuarioCreate(UsuarioBase):
-    password: Optional[str] = None  # <-- Opcional para ciudadanos
+    password: Optional[str] = None  # <-- Solo para Admins y Op
 
 class UsuarioLogin(BaseModel):
     login: str

@@ -32,13 +32,12 @@ def verificar_token(token: str):
     except Exception:
         return None
 
-# Configuramos el contexto de hasheo
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Configuramos el contexto de hasheo de contraseñas
+
+pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
 def hash_password(password: str):
-    """Transforma texto plano en un hash seguro"""
     return pwd_context.hash(password)
 
 def verify_password(plain_password: str, hashed_password: str):
-    """Compara la clave ingresada con el hash de la base de datos"""
     return pwd_context.verify(plain_password, hashed_password)

@@ -224,7 +224,7 @@ def crear_tramite(
 @app.get("/api/tramites/mis-solicitudes")
 def listar_solicitudes_ciudadano(email: str, db: Session = Depends(get_db)):
     """ Devuelve trámites asociados al email original """
-    tramites = db.query(models.Tramite).filter(models.Tramite.email_solicitante == email).all()
+    tramites = db.query(models.Tramite).filter(models.Tramite.email_contacto == email).all()
     return tramites
 
 @app.patch("/api/tramites/{id}")
