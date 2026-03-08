@@ -1,1 +1,14 @@
-pip install fastapi uvicorn sqlalchemy pydantic[email] reportlab requests python-multipart pycryptodome psycopg2-binary python-jose[cryptography] python-dotenv mailtrap argon2-cffi
+fastapi
+uvicorn
+sqlalchemy
+pydantic[email]
+reportlab
+requests
+python-multipart
+pycryptodome
+psycopg2-binary
+python-jose[cryptography]
+python-dotenv
+mailtrap
+passlib
+argon2-cffi

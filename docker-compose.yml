@@ -1,0 +1,35 @@
+services:
+  # Base de Datos
+  db:
+    image: postgres:15
+    container_name: rdam_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 0406
+      POSTGRES_DB: rdam_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data # Esto guarda tus datos aunque apagues la PC
+    healthcheck: # Esto le enseña a Docker a saber si la DB está lista
+      test: ["CMD-SHELL", "pg_isready -U postgres -d rdam_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    
+
+  # Aplicación FastAPI
+  web:
+    build: .
+    container_name: rdam_api
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - app/.env # Esto lee automáticamente tu archivo .env
+    
