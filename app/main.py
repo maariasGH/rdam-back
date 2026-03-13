@@ -19,6 +19,7 @@ import os
 from dotenv import load_dotenv
 from .security import verify_password, crear_token_jwt, verificar_token
 import requests
+from fastapi.middleware.cors import CORSMiddleware
 
 # Cargar las variables del archivo .env
 load_dotenv()
@@ -55,9 +56,10 @@ def enviar_email(destinatario, codigo):
     )
 
     try:
-        client = mt.MailtrapClient(token=token_actual)
+        client = mt.MailtrapClient(token=token_actual, sandbox=True, inbox_id=4438839)
         client.send(mail)
         print(f"✅ Email enviado a {destinatario}")
+        print(f"[SIMULACION] Codigo enviado a {destinatario}: {codigo}. Válido por 15 minutos. Tambien puede ser consultado en la BD")
     except Exception as e:
         print(f"❌ Error al enviar con Mailtrap: {e}")
         print(f"[SIMULACION] Codigo enviado a {destinatario}: {codigo}. Válido por 15 minutos. Tambien puede ser consultado en la BD")
@@ -70,7 +72,21 @@ def generar_codigo():
 # Inicialización de la DB
 models.Base.metadata.create_all(bind=engine)
 
+# Configuración de CORS para permitir que el Front (puerto 5173 de Vite) se comunique
 app = FastAPI(title="RDAM Santa Fe - Backend Oficial")
+
+origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 def get_db():
     db = SessionLocal()
@@ -123,12 +139,13 @@ def solicitar_codigo(email: str, recaptcha_token: str, db: Session = Depends(get
     }
     response = requests.post(url, data=payload).json()
 
-    # Si la validación falla o el score es bajo (ej: < 0.5), bloqueamos el intento
-    if recaptcha_token == "token_prueba_123":
-        print("⚠️ Bypass de Captcha activado (Solo desarrollo, hasta que se desarrolle el front-end y se pueda integrar la api del Captcha)")
-    else:
-        if not response.get("success") or response.get("score", 0) < 0.5:
-            raise HTTPException(status_code=400, detail="Error de seguridad: Solicitud sospechosa detectada.")
+    # El v2 no tiene 'score', solo valida 'success'
+    if not response.get("success"):
+        print(f"DEBUG: Respuesta de Google: {response}") # Esto te dirá exactamente por qué falla
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Error de seguridad: Solicitud sospechosa detectada. Detalles: {response.get('error-codes')}"
+        )
 
     # 2. Tu lógica actual (Generación de OTP y envío de email)
     db.query(models.CodigoTemporal).filter(models.CodigoTemporal.email == email).delete()

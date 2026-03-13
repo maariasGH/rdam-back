@@ -2,3 +2,4 @@ winget install Python.Python.3.12 instalar python
 winget install PostgreSQL.PostgreSQL.16 instalar PostgreSQL
 uvicorn app.main:app --reload Para arrancar el servidor python
 .\pg_ctl.exe start -D "F:\PostgreSQL\18\data" Para Iniciar el Servidor postgre
+ALTER USER postgres WITH PASSWORD '0406'; Este es para agregar la password al usuario del Postgres de docker que se crea sin una.

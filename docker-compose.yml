@@ -7,10 +7,11 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: 0406
       POSTGRES_DB: rdam_db
+    command: postgres -c timezone=UTC
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
-      - ./postgres_data:/var/lib/postgresql/data # Esto guarda tus datos aunque apagues la PC
+      - ./postgres_data:/var/lib/postgresql/data # Esto guarda los datos aunque apagues la PC
     healthcheck: # Esto le enseña a Docker a saber si la DB está lista
       test: ["CMD-SHELL", "pg_isready -U postgres -d rdam_db"]
       interval: 5s
@@ -31,5 +32,5 @@ services:
       db:
         condition: service_healthy
     env_file:
-      - app/.env # Esto lee automáticamente tu archivo .env
+      - app/.env # Esto lee automáticamente el archivo .env
     
